@@ -1,9 +1,12 @@
 /* vim: ts=4 sw=4 noexpandtab
  * This file is part of ToaruOS and is released under the terms
  * of the NCSA / University of Illinois License - see LICENSE.md
- * Copyright (C) 2015 Kevin Lange
+ * Copyright (C) 2015-2016 Kevin Lange
  *
- * fetch - Retreive documents from HTTP servers.
+ * netboot-init
+ *
+ *   Download, decompress, and mount a root filesystem from the
+ *   network and run the `/bin/init` contained therein.
  *
  */
 #include <stdio.h>
