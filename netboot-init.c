@@ -23,6 +23,8 @@
 #include <syscall.h>
 #include <zlib.h>
 
+#define NETBOOT_URL "http://toaruos.org/netboot.img.gz"
+
 #include "../../userspace/lib/http_parser.c"
 #include "../../userspace/gui/terminal/terminal-font.h"
 #include "../../kernel/include/video.h"
@@ -225,7 +227,7 @@ int main(int argc, char * argv[]) {
 	sleep(2);
 
 	struct http_req my_req;
-	parse_url("http://toaruos.org/netboot.img.gz", &my_req);
+	parse_url(NETBOOT_URL, &my_req);
 
 	char file[100];
 	sprintf(file, "/dev/net/%s", my_req.domain);
