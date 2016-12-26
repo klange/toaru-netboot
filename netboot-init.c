@@ -190,6 +190,15 @@ int callback_body (http_parser *p, const char *buf, size_t len) {
 static char * gz = "/tmp/netboot.img.gz";
 static char * img = "/tmp/netboot.img";
 
+/* This is taken from the kernel/sys/version.c */
+#if (defined(__GNUC__) || defined(__GNUG__)) && !(defined(__clang__) || defined(__INTEL_COMPILER))
+# define COMPILER_VERSION "gcc " __VERSION__
+#elif (defined(__clang__))
+# define COMPILER_VERSION "clang " __clang_version__
+#else
+# define COMPILER_VERSION "unknown-compiler how-did-you-do-that"
+#endif
+
 int main(int argc, char * argv[]) {
 	int _stdin  = open("/dev/null", O_RDONLY);
 	int _stdout = open("/dev/ttyS0", O_WRONLY);
@@ -214,7 +223,21 @@ int main(int argc, char * argv[]) {
 	TRACE("\n\nToaruOS Netboot Host\n\n");
 	struct utsname u;
 	uname(&u);
-	TRACE("%s %s %s %s\n\n", u.sysname, u.nodename, u.release, u.version);
+	TRACE("%s %s %s %s\n", u.sysname, u.nodename, u.release, u.version);
+
+	{
+		char kernel_version[512] = {0};
+		int fd = open("/proc/compiler", O_RDONLY);
+		size_t r = read(fd, kernel_version, 512);
+		if (kernel_version[strlen(kernel_version)-1] == '\n') {
+			kernel_version[strlen(kernel_version)-1] = '\0';
+		}
+		TRACE(" Kernel was built with: %.*s\n", r, kernel_version);
+	}
+
+	TRACE(" Netboot binary was built with: %s\n", COMPILER_VERSION);
+
+	TRACE("\n");
 
 	if (has_video) {
 		TRACE("Display is %dx%d (%d bpp), framebuffer at 0x%x\n", width, height, depth, framebuffer);
