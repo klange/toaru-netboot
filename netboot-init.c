@@ -15,12 +15,15 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <time.h>
 #include <syscall.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <sys/utsname.h>
+#include <sys/time.h>
 #include <getopt.h>
 #include <syscall.h>
+
 #include <zlib.h>
 
 #define NETBOOT_URL "http://toaruos.org/netboot.img.gz"
@@ -58,6 +61,7 @@ static size_t size = 0;
 static int has_video = 1;
 static int width, height, depth;
 static char * framebuffer;
+static struct timeval start;
 
 #define char_height 12
 #define char_width  8
@@ -176,12 +180,25 @@ int callback_header_value (http_parser *p, const char *buf, size_t len) {
 #define bar_perc "||||||||||||||||||||"
 #define bar_spac "                    "
 int callback_body (http_parser *p, const char *buf, size_t len) {
+	struct timeval now;
 	fwrite(buf, 1, len, fetch_options.out);
 	size += len;
+	gettimeofday(&now, NULL);
 	TRACE("\033[G%6dkB",size/1024);
 	if (content_length) {
 		int percent = (size * BAR_WIDTH) / (content_length);
 		TRACE(" / %6dkB [%.*s%.*s]", content_length/1024, percent,bar_perc,BAR_WIDTH-percent,bar_spac);
+	}
+
+	double timediff = (double)(now.tv_sec - start.tv_sec) + (double)(now.tv_usec - start.tv_usec)/1000000.0;
+	if (now.tv_sec - start.tv_sec > 0.0) {
+		double s = ((double)(size * 8) / timediff)/(1024.0);
+		if (s > 1024.0) {
+			TRACE(" %.2f mbps", s/1024.0);
+		} else {
+			TRACE(" %.2f kbps", s);
+		}
+		TRACE(" (%.2f sec)", timediff);
 	}
 	fflush(stderr);
 	return 0;
@@ -285,6 +302,7 @@ int main(int argc, char * argv[]) {
 
 	fprintf(stderr,"Downloading netboot payload...\n");
 
+	gettimeofday(&start, NULL);
 	while (!feof(f)) {
 		char buf[1024];
 		memset(buf, 0, sizeof(buf));
@@ -307,8 +325,8 @@ int main(int argc, char * argv[]) {
 	if (!dest) return 1;
 
 	while (!gzeof(src)) {
-	 char buf[1024];
-	 int r = gzread(src, buf, 1024);
+	 char buf[10240];
+	 int r = gzread(src, buf, 10240);
 	 fwrite(buf, r, 1, dest);
 	}
 
