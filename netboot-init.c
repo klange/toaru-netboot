@@ -267,7 +267,11 @@ int main(int argc, char * argv[]) {
 	sleep(2);
 
 	struct http_req my_req;
-	parse_url(NETBOOT_URL, &my_req);
+	if (argc > 1) {
+		parse_url(argv[1], &my_req);
+	} else {
+		parse_url(NETBOOT_URL, &my_req);
+	}
 
 	char file[100];
 	sprintf(file, "/dev/net/%s", my_req.domain);
