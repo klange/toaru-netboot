@@ -107,6 +107,14 @@ static void print_string(char * msg) {
 					if (*msg == 'G') {
 						x = LEFT_PAD;
 					}
+					if (*msg == 'K') {
+						int last_x = x;
+						while (x < width) {
+							write_char(x,y,' ',0xFFFFFFFF);
+							x += char_width;
+						}
+						x = last_x;
+					}
 				}
 				break;
 			default:
