@@ -199,15 +199,24 @@ int callback_body (http_parser *p, const char *buf, size_t len) {
 	}
 
 	double timediff = (double)(now.tv_sec - start.tv_sec) + (double)(now.tv_usec - start.tv_usec)/1000000.0;
-	if (now.tv_sec - start.tv_sec > 0.0) {
-		double s = ((double)(size * 8) / timediff)/(1024.0);
+	if (timediff > 0.0) {
+		double rate = (double)(size) / timediff;
+		double s = rate/(1024.0) * 8.0;
 		if (s > 1024.0) {
 			TRACE(" %.2f mbps", s/1024.0);
 		} else {
 			TRACE(" %.2f kbps", s);
 		}
-		TRACE(" (%.2f sec)", timediff);
+
+		if (content_length) {
+			if (rate > 0.0) {
+				double remaining = (double)(content_length - size) / rate;
+
+				TRACE(" (%.2f sec remaining)", remaining);
+			}
+		}
 	}
+	TRACE("\033[K");
 	fflush(stderr);
 	return 0;
 }
