@@ -77,6 +77,11 @@ GRUB_MODS += _grub_support/part_plan.mod
 GRUB_MODS += _grub_support/help.mod
 GRUB_MODS += _grub_support/part_sun.mod
 
+GRUB_FILES  = toaru-netboot/boot/grub/grub.cfg
+GRUB_FILES += toaru-netboot/boot/grub/menus.cfg
+GRUB_FILES += toaru-netboot/boot/grub/modules.cfg
+GRUB_FILES += toaru-netboot/boot/grub/theme.txt
+
 toaru-netboot/mod/%.ko.xz: $(TOOLCHAIN)/../../hdd/mod/%.ko
 	@cp $< _tmp.ko
 	@xz _tmp.ko
@@ -90,7 +95,7 @@ _grub_support: /usr/lib/grub/i386-pc
 	cp -r /usr/lib/grub/i386-pc _grub_support
 	rm _grub_support/*.mod
 
-netboot.iso: toaru-netboot/netboot-init.xz toaru-netboot/kernel.xz $(KOS) $(GRUB_MODS)
+netboot.iso: toaru-netboot/netboot-init.xz toaru-netboot/kernel.xz $(KOS) $(GRUB_MODS) $(GRUB_FILES)
 	grub-mkrescue -d _grub_support --compress=xz -o $@ toaru-netboot
 
 toaru-netboot/kernel.xz: $(TOOLCHAIN)/../../toaruos-kernel
