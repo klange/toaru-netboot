@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -62,6 +63,7 @@ static int has_video = 1;
 static int width, height, depth;
 static char * framebuffer;
 static struct timeval start;
+static int framebuffer_fd;
 
 #define char_height 12
 #define char_width  8
@@ -224,6 +226,22 @@ int callback_body (http_parser *p, const char *buf, size_t len) {
 static char * gz = "/tmp/netboot.img.gz";
 static char * img = "/tmp/netboot.img";
 
+static void update_video(int sig) {
+	(void)sig;
+	ioctl(framebuffer_fd, IO_VID_WIDTH,  &width);
+	ioctl(framebuffer_fd, IO_VID_HEIGHT, &height);
+	ioctl(framebuffer_fd, IO_VID_DEPTH,  &depth);
+	ioctl(framebuffer_fd, IO_VID_ADDR,   &framebuffer);
+	ioctl(framebuffer_fd, IO_VID_SIGNAL, NULL);
+	//memset(framebuffer, 0x00, width * height * 4);
+	x = LEFT_PAD;
+	y = 0;
+
+	if (sig) {
+		TRACE("(video display changed to %d x %d)\n", width, height);
+	}
+}
+
 /* This is taken from the kernel/sys/version.c */
 #if (defined(__GNUC__) || defined(__GNUG__)) && !(defined(__clang__) || defined(__INTEL_COMPILER))
 # define COMPILER_VERSION "gcc " __VERSION__
@@ -243,15 +261,12 @@ int main(int argc, char * argv[]) {
 		_stderr = open("/dev/null", O_WRONLY);
 	}
 
-	int framebuffer_fd = open("/dev/fb0", O_RDONLY);
+	framebuffer_fd = open("/dev/fb0", O_RDONLY);
 	if (framebuffer_fd < 0) {
 		has_video = 0;
 	} else {
-		ioctl(framebuffer_fd, IO_VID_WIDTH,  &width);
-		ioctl(framebuffer_fd, IO_VID_HEIGHT, &height);
-		ioctl(framebuffer_fd, IO_VID_DEPTH,  &depth);
-		ioctl(framebuffer_fd, IO_VID_ADDR,   &framebuffer);
-		ioctl(framebuffer_fd, IO_VID_SIGNAL, NULL);
+		update_video(0);
+		signal(SIGWINEVENT, update_video);
 	}
 
 	TRACE("\n\nToaruOS Netboot Host\n\n");
