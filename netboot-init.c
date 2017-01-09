@@ -30,6 +30,7 @@
 #define NETBOOT_URL "http://toaruos.org/netboot.img.gz"
 
 #include "../../userspace/lib/http_parser.c"
+#include "../../userspace/lib/pthread.c"
 #include "../../userspace/gui/terminal/terminal-font.h"
 #include "../../kernel/include/video.h"
 
@@ -242,6 +243,27 @@ static void update_video(int sig) {
 	}
 }
 
+static volatile int watchdog_success = 0;
+
+static void * watchdog_func(void * garbage) {
+	(void)garbage;
+
+	int i = 0;
+
+	while (i < 5) {
+		usleep(1000000);
+		if (watchdog_success) {
+			pthread_exit(0);
+		}
+		i++;
+	}
+
+	TRACE("ERROR: Network does not seem to be available, or unable to reach host.\n");
+	TRACE("       Please check your VM configuration.\n");
+
+	pthread_exit(0);
+}
+
 /* This is taken from the kernel/sys/version.c */
 #if (defined(__GNUC__) || defined(__GNUG__)) && !(defined(__clang__) || defined(__INTEL_COMPILER))
 # define COMPILER_VERSION "gcc " __VERSION__
@@ -312,12 +334,18 @@ int main(int argc, char * argv[]) {
 
 	fetch_options.out = fopen(gz,"w");
 
+	pthread_t watchdog;
+
+	pthread_create(&watchdog, NULL, watchdog_func, NULL);
+
 	FILE * f = fopen(file,"r+");
 	if (!f) {
 		TRACE("ERROR: Network does not seem to be available, or unable to reach host.\n");
 		TRACE("       Please check your VM configuration.\n");
 		return 0;
 	}
+
+	watchdog_success = 1;
 
 	TRACE("Connection established.\n");
 
