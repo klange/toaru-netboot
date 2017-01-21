@@ -1,7 +1,7 @@
 /* vim: ts=4 sw=4 noexpandtab
  * This file is part of ToaruOS and is released under the terms
  * of the NCSA / University of Illinois License - see LICENSE.md
- * Copyright (C) 2015-2016 Kevin Lange
+ * Copyright (C) 2015-2017 Kevin Lange
  *
  * netboot-init
  *
@@ -299,6 +299,10 @@ int main(int argc, char * argv[]) {
 	}
 
 	TRACE("\n\nToaruOS Netboot Host\n\n");
+
+	TRACE("ToaruOS is free software under the NCSA / University of Illinois license.\n");
+	TRACE("   http://toaruos.org/   https://github.com/klange/toaruos\n\n");
+
 	struct utsname u;
 	uname(&u);
 	TRACE("%s %s %s %s\n", u.sysname, u.nodename, u.release, u.version);
