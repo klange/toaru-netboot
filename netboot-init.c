@@ -245,6 +245,16 @@ static void update_video(int sig) {
 
 static volatile int watchdog_success = 0;
 
+static void network_error(int is_thread) {
+	TRACE("ERROR: Network does not seem to be available, or unable to reach host.\n");
+	TRACE("       Please check your VM configuration.\n");
+	if (is_thread) {
+		pthread_exit(0);
+	} else {
+		exit(1);
+	}
+}
+
 static void * watchdog_func(void * garbage) {
 	(void)garbage;
 
@@ -258,10 +268,7 @@ static void * watchdog_func(void * garbage) {
 		i++;
 	}
 
-	TRACE("ERROR: Network does not seem to be available, or unable to reach host.\n");
-	TRACE("       Please check your VM configuration.\n");
-
-	pthread_exit(0);
+	network_error(1);
 }
 
 /* This is taken from the kernel/sys/version.c */
@@ -320,6 +327,37 @@ int main(int argc, char * argv[]) {
 	TRACE("Sleeping for a moment to let network initialize...\n");
 	sleep(2);
 
+#define LINE_LEN 100
+	char line[LINE_LEN];
+
+	FILE * f = fopen("/proc/netif", "r");
+
+	while (fgets(line, LINE_LEN, f) != NULL) {
+		if (strstr(line, "ip:") == line) {
+			char * value = strchr(line,'\t')+1;
+			*strchr(value,'\n') = '\0';
+			TRACE("  IP address: %s\n", value);
+		} else if (strstr(line, "device:") == line) {
+			char * value = strchr(line,'\t')+1;
+			*strchr(value,'\n') = '\0';
+			TRACE("  Network Driver: %s\n", value);
+		} else if (strstr(line, "mac:") == line) {
+			char * value = strchr(line,'\t')+1;
+			*strchr(value,'\n') = '\0';
+			TRACE("  MAC address: %s\n", value);
+		} else if (strstr(line, "dns:") == line) {
+			char * value = strchr(line,'\t')+1;
+			*strchr(value,'\n') = '\0';
+			TRACE("  DNS server: %s\n", value);
+		} else if (strstr(line,"no network") == line){
+			network_error(0);
+		}
+		memset(line, 0, LINE_LEN);
+	}
+
+	fclose(f);
+
+
 	struct http_req my_req;
 	if (argc > 1) {
 		parse_url(argv[1], &my_req);
@@ -338,11 +376,9 @@ int main(int argc, char * argv[]) {
 
 	pthread_create(&watchdog, NULL, watchdog_func, NULL);
 
-	FILE * f = fopen(file,"r+");
+	f = fopen(file,"r+");
 	if (!f) {
-		TRACE("ERROR: Network does not seem to be available, or unable to reach host.\n");
-		TRACE("       Please check your VM configuration.\n");
-		return 0;
+		network_error(0);
 	}
 
 	watchdog_success = 1;
@@ -368,9 +404,9 @@ int main(int argc, char * argv[]) {
 
 	gettimeofday(&start, NULL);
 	while (!feof(f)) {
-		char buf[1024];
+		char buf[10240];
 		memset(buf, 0, sizeof(buf));
-		size_t r = fread(buf, 1, 1024, f);
+		size_t r = fread(buf, 1, 10240, f);
 		http_parser_execute(&parser, &settings, buf, r);
 	}
 

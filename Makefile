@@ -14,6 +14,7 @@ KOS += toaru-netboot/mod/ps2kbd.ko.xz
 KOS += toaru-netboot/mod/ps2mouse.ko.xz
 KOS += toaru-netboot/mod/random.ko.xz
 KOS += toaru-netboot/mod/rtl.ko.xz
+KOS += toaru-netboot/mod/e1000.ko.xz
 KOS += toaru-netboot/mod/serial.ko.xz
 KOS += toaru-netboot/mod/snd.ko.xz
 KOS += toaru-netboot/mod/tmpfs.ko.xz
