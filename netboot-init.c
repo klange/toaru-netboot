@@ -353,6 +353,10 @@ int main(int argc, char * argv[]) {
 			char * value = strchr(line,'\t')+1;
 			*strchr(value,'\n') = '\0';
 			TRACE("  DNS server: %s\n", value);
+		} else if (strstr(line, "gateway:") == line) {
+			char * value = strchr(line,'\t')+1;
+			*strchr(value,'\n') = '\0';
+			TRACE("  Gateway: %s\n", value);
 		} else if (strstr(line,"no network") == line){
 			network_error(0);
 		}

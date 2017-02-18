@@ -2,6 +2,7 @@ all: netboot.iso
 
 KOS  = toaru-netboot/mod/ac97.ko.xz
 KOS += toaru-netboot/mod/ata.ko.xz
+KOS += toaru-netboot/mod/ataold.ko.xz
 KOS += toaru-netboot/mod/debug_shell.ko.xz
 KOS += toaru-netboot/mod/ext2.ko.xz
 KOS += toaru-netboot/mod/iso9660.ko.xz
@@ -20,6 +21,7 @@ KOS += toaru-netboot/mod/snd.ko.xz
 KOS += toaru-netboot/mod/tmpfs.ko.xz
 KOS += toaru-netboot/mod/vboxguest.ko.xz
 KOS += toaru-netboot/mod/vidset.ko.xz
+KOS += toaru-netboot/mod/vmware.ko.xz
 KOS += toaru-netboot/mod/zero.ko.xz
 
 GRUB_MODS  = _grub_support/biosdisk.mod

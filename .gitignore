@@ -3,3 +3,4 @@ toaru-netboot/kernel.xz
 toaru-netboot/mod
 toaru-netboot/netboot-init.xz
 _grub_support
+.gdb_history
