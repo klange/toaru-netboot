@@ -450,7 +450,7 @@ int main(int argc, char * argv[]) {
 	TRACE("Executing init...\n");
 	char * const _argv[] = {
 		"/bin/init",
-		"live-welcome",
+		"--migrate",
 		NULL,
 	};
 	execve("/bin/init",_argv,NULL);
