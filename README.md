@@ -13,4 +13,4 @@ To use your own server as a netboot source, you need to change the URL from whic
     qemu-system-i386 -vga std -m 512 -cdrom http://toaruos.org/netboot.iso -M accel=kvm:tcg \
       -soundhw ac97 -net user -net nic,model=rtl8139 -serial stdio
 
-![screenshot](http://i.imgur.com/EtESKdW.png)
+![screenshot](http://i.imgur.com/tO5vGdK.png)
