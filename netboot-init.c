@@ -31,8 +31,9 @@
 
 #include "../../userspace/lib/http_parser.c"
 #include "../../userspace/lib/pthread.c"
-#include "../../userspace/gui/terminal/terminal-font.h"
 #include "../../kernel/include/video.h"
+
+#include "new_font.h"
 
 extern int mount(char* src,char* tgt,char* typ,unsigned long,void*);
 
@@ -66,8 +67,12 @@ static char * framebuffer;
 static struct timeval start;
 static int framebuffer_fd;
 
-#define char_height 12
-#define char_width  8
+#define char_height 20
+#define char_width  9
+
+#define BG_COLOR 0xFF050505
+#define FG_COLOR 0xFFCCCCCC
+#define EX_COLOR 0xFF999999
 
 static void set_point(int x, int y, uint32_t value) {
 	uint32_t * disp = (uint32_t *)framebuffer;
@@ -79,16 +84,30 @@ static void write_char(int x, int y, int val, uint32_t color) {
 	if (val > 128) {
 		val = 4;
 	}
+#ifdef number_font
 	uint8_t * c = number_font[val];
 	for (uint8_t i = 0; i < char_height; ++i) {
 		for (uint8_t j = 0; j < char_width; ++j) {
 			if (c[i] & (1 << (8-j))) {
 				set_point(x+j,y+i,color);
 			} else {
-				set_point(x+j,y+i,0xFF000000);
+				set_point(x+j,y+i,BG_COLOR);
 			}
 		}
 	}
+#else
+	uint16_t * c = large_font[val];
+	for (uint8_t i = 0; i < char_height; ++i) {
+		for (uint8_t j = 0; j < char_width; ++j) {
+			if (c[i] & (1 << (15-j))) {
+				set_point(x+j,y+i,color);
+			} else {
+				set_point(x+j,y+i,BG_COLOR);
+			}
+		}
+	}
+
+#endif
 }
 
 #define LEFT_PAD 40
@@ -97,7 +116,7 @@ static int y = 0;
 static void print_string(char * msg) {
 	if (!has_video) return;
 	while (*msg) {
-		write_char(x,y,' ',0xFF000000);
+		write_char(x,y,' ',BG_COLOR);
 		switch (*msg) {
 			case '\n':
 				x = LEFT_PAD;
@@ -113,7 +132,7 @@ static void print_string(char * msg) {
 					if (*msg == 'K') {
 						int last_x = x;
 						while (x < width) {
-							write_char(x,y,' ',0xFFFFFFFF);
+							write_char(x,y,' ',FG_COLOR);
 							x += char_width;
 						}
 						x = last_x;
@@ -121,11 +140,11 @@ static void print_string(char * msg) {
 				}
 				break;
 			default:
-				write_char(x,y,*msg,0xFFFFFFFF);
+				write_char(x,y,*msg,FG_COLOR);
 				x += char_width;
 				break;
 		}
-		write_char(x,y,'_',0xFF999999);
+		write_char(x,y,'_',EX_COLOR);
 		msg++;
 	}
 }
@@ -234,7 +253,12 @@ static void update_video(int sig) {
 	ioctl(framebuffer_fd, IO_VID_DEPTH,  &depth);
 	ioctl(framebuffer_fd, IO_VID_ADDR,   &framebuffer);
 	ioctl(framebuffer_fd, IO_VID_SIGNAL, NULL);
-	//memset(framebuffer, 0x00, width * height * 4);
+	/* Clear the screen */
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			set_point(x,y,BG_COLOR);
+		}
+	}
 	x = LEFT_PAD;
 	y = 0;
 
@@ -376,7 +400,7 @@ int main(int argc, char * argv[]) {
 	char file[100];
 	sprintf(file, "/dev/net/%s", my_req.domain);
 
-	TRACE("Fetching from %s...\n", my_req.domain);
+	TRACE("Fetching from %s... ", my_req.domain);
 
 	fetch_options.out = fopen(gz,"w");
 
@@ -423,7 +447,7 @@ int main(int argc, char * argv[]) {
 	fflush(fetch_options.out);
 	fclose(fetch_options.out);
 
-	TRACE("Decompressing payload...\n");
+	TRACE("Decompressing payload... ");
 	gzFile src = gzopen(gz, "r");
 
 	if (!src) return 1;
@@ -444,8 +468,9 @@ int main(int argc, char * argv[]) {
 
 	unlink(gz);
 
-	TRACE("Mounting filesystem...\n");
+	TRACE("Mounting filesystem... ");
 	mount(img, "/", "ext2", 0, NULL);
+	TRACE("Done.\n");
 
 	TRACE("Executing init...\n");
 	char * const _argv[] = {
