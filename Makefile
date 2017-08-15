@@ -108,6 +108,6 @@ toaru-netboot/kernel.xz: $(TOOLCHAIN)/../../toaruos-kernel
 
 toaru-netboot/netboot-init.xz: netboot-init.c
 	if [ -f toaru-netboot/netboot-init.xz ]; then rm toaru-netboot/netboot-init.xz; fi
-	i686-pc-toaru-gcc -s -static -Wl,-static -std=c99 -I $(TOOLCHAIN) -o toaru-netboot/netboot-init netboot-init.c -lz -lm
+	i686-pc-toaru-gcc -s -static -Wl,-static -std=c99 -I $(TOOLCHAIN) -o toaru-netboot/netboot-init netboot-init.c -lmbedtls -lmbedx509 -lmbedcrypto -lz -lm
 	xz toaru-netboot/netboot-init
 

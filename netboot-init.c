@@ -27,13 +27,49 @@
 
 #include <zlib.h>
 
-#define NETBOOT_URL "http://toaruos.org/netboot.img.gz"
+#include <mbedtls/platform.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/error.h>
+
+#define NETBOOT_URL "https://toaruos.org/netboot.img.gz"
 
 #include "../../userspace/lib/http_parser.c"
 #include "../../userspace/lib/pthread.c"
 #include "../../kernel/include/video.h"
 
 #include "new_font.h"
+
+const char SSL_CA_PEM[] =
+"-----BEGIN CERTIFICATE-----\n"
+"MIIDSjCCAjKgAwIBAgIQRK+wgNajJ7qJMDmGLvhAazANBgkqhkiG9w0BAQUFADA/\n"
+"MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xFzAVBgNVBAMT\n"
+"DkRTVCBSb290IENBIFgzMB4XDTAwMDkzMDIxMTIxOVoXDTIxMDkzMDE0MDExNVow\n"
+"PzEkMCIGA1UEChMbRGlnaXRhbCBTaWduYXR1cmUgVHJ1c3QgQ28uMRcwFQYDVQQD\n"
+"Ew5EU1QgUm9vdCBDQSBYMzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB\n"
+"AN+v6ZdQCINXtMxiZfaQguzH0yxrMMpb7NnDfcdAwRgUi+DoM3ZJKuM/IUmTrE4O\n"
+"rz5Iy2Xu/NMhD2XSKtkyj4zl93ewEnu1lcCJo6m67XMuegwGMoOifooUMM0RoOEq\n"
+"OLl5CjH9UL2AZd+3UWODyOKIYepLYYHsUmu5ouJLGiifSKOeDNoJjj4XLh7dIN9b\n"
+"xiqKqy69cK3FCxolkHRyxXtqqzTWMIn/5WgTe1QLyNau7Fqckh49ZLOMxt+/yUFw\n"
+"7BZy1SbsOFU5Q9D8/RhcQPGX69Wam40dutolucbY38EVAjqr2m7xPi71XAicPNaD\n"
+"aeQQmxkqtilX4+U9m5/wAl0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNV\n"
+"HQ8BAf8EBAMCAQYwHQYDVR0OBBYEFMSnsaR7LHH62+FLkHX/xBVghYkQMA0GCSqG\n"
+"SIb3DQEBBQUAA4IBAQCjGiybFwBcqR7uKGY3Or+Dxz9LwwmglSBd49lZRNI+DT69\n"
+"ikugdB/OEIKcdBodfpga3csTS7MgROSR6cz8faXbauX+5v3gTt23ADq1cEmv8uXr\n"
+"AvHRAosZy5Q6XkjEGB5YGV8eAlrwDPGxrancWYaLbumR9YbK+rlmM6pZW87ipxZz\n"
+"R8srzJmwN0jP41ZL9c8PDHIyh8bwRLtTcm1D9SZImlJnt1ir/md2cXjbDaJWFBM5\n"
+"JDGFoqgCWjBH4d1QB7wCCZAA62RjYJsWvIjJEubSfZGL+T0yjWW06XyxV3bqxbYo\n"
+"Ob8VZRzI9neWagqNdwvYkQsEjgfbKbYK7p2CNTUQ\n"
+"-----END CERTIFICATE-----\n";
+
+const char *DRBG_PERS = "ToaruOS Netboot";
+
+static mbedtls_entropy_context _entropy;
+static mbedtls_ctr_drbg_context _ctr_drbg;
+static mbedtls_x509_crt _cacert;
+static mbedtls_ssl_context _ssl;
+static mbedtls_ssl_config _ssl_conf;
 
 extern int mount(char* src,char* tgt,char* typ,unsigned long,void*);
 
@@ -42,6 +78,8 @@ extern int mount(char* src,char* tgt,char* typ,unsigned long,void*);
 struct http_req {
 	char domain[SIZE];
 	char path[SIZE];
+	int port;
+	int ssl;
 };
 
 struct {
@@ -164,6 +202,24 @@ void parse_url(char * d, struct http_req * r) {
 			strcpy(r->domain, d);
 			strcpy(r->path, s);
 		}
+		r->port = 80;
+		r->ssl = 0;
+	} else if (strstr(d, "https://") == d) {
+
+		d += strlen("https://");
+
+		char * s = strstr(d, "/");
+		if (!s) {
+			strcpy(r->domain, d);
+			strcpy(r->path, "");
+		} else {
+			*s = 0;
+			s++;
+			strcpy(r->domain, d);
+			strcpy(r->path, s);
+		}
+		r->port = 443;
+		r->ssl = 1;
 	} else {
 		fprintf(stderr, "sorry, can't parse %s\n", d);
 		exit(1);
@@ -295,6 +351,69 @@ static void * watchdog_func(void * garbage) {
 	network_error(1);
 }
 
+static int ssl_send(void * ctx, const unsigned char * buf, size_t len) {
+	FILE * f = ctx;
+	size_t out = fwrite(buf, 1, len, f);
+	fflush(f);
+	return out;
+}
+
+static int ssl_recv(void * ctx, unsigned char * buf, size_t len) {
+	FILE * f = ctx;
+	return fread(buf, 1, len, f);
+}
+
+
+static int ssl_handshake(struct http_req * r, FILE * socket) {
+	mbedtls_entropy_init(&_entropy);
+	mbedtls_ctr_drbg_init(&_ctr_drbg);
+	mbedtls_x509_crt_init(&_cacert);
+	mbedtls_ssl_init(&_ssl);
+	mbedtls_ssl_config_init(&_ssl_conf);
+
+	int ret;
+
+	if (mbedtls_ctr_drbg_seed(&_ctr_drbg, mbedtls_entropy_func, &_entropy, DRBG_PERS, sizeof(DRBG_PERS)) != 0) {
+		TRACE("Failed to set seed?\n");
+		return 1;
+	}
+
+	if (ret = mbedtls_x509_crt_parse(&_cacert, SSL_CA_PEM, sizeof(SSL_CA_PEM)) != 0) {
+		TRACE("Failed to parse %d certificate(s)\n", ret);
+	}
+
+	if (mbedtls_ssl_config_defaults(&_ssl_conf,
+				MBEDTLS_SSL_IS_CLIENT,
+				MBEDTLS_SSL_TRANSPORT_STREAM,
+				MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
+		TRACE("defaults\n");
+	}
+
+	mbedtls_ssl_conf_ca_chain(&_ssl_conf, &_cacert, NULL);
+	mbedtls_ssl_conf_rng(&_ssl_conf, mbedtls_ctr_drbg_random, &_ctr_drbg);
+
+	mbedtls_ssl_conf_authmode(&_ssl_conf, MBEDTLS_SSL_VERIFY_REQUIRED);
+
+	if (mbedtls_ssl_setup(&_ssl, &_ssl_conf) != 0) {
+		TRACE("ssl config\n");
+	}
+
+	mbedtls_ssl_set_hostname(&_ssl, r->domain);
+
+	mbedtls_ssl_set_bio(&_ssl, socket, ssl_send, ssl_recv, NULL);
+
+	do {
+		ret = mbedtls_ssl_handshake(&_ssl);
+	} while (ret != 0 && (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE));
+	if (ret <0) {
+		TRACE("Error with handshake: %d\n", ret);
+		fclose(socket);
+		return 1;
+	}
+
+	return 0;
+}
+
 /* This is taken from the kernel/sys/version.c */
 #if (defined(__GNUC__) || defined(__GNUG__)) && !(defined(__clang__) || defined(__INTEL_COMPILER))
 # define COMPILER_VERSION "gcc " __VERSION__
@@ -398,7 +517,7 @@ int main(int argc, char * argv[]) {
 	}
 
 	char file[100];
-	sprintf(file, "/dev/net/%s", my_req.domain);
+	sprintf(file, "/dev/net/%s:%d", my_req.domain, my_req.port);
 
 	TRACE("Fetching from %s... ", my_req.domain);
 
@@ -417,12 +536,33 @@ int main(int argc, char * argv[]) {
 
 	TRACE("Connection established.\n");
 
-	fprintf(f,
-		"GET /%s HTTP/1.0\r\n"
-		"User-Agent: curl/7.35.0\r\n"
-		"Host: %s\r\n"
-		"Accept: */*\r\n"
-		"\r\n", my_req.path, my_req.domain);
+	if (my_req.ssl) {
+		if (ssl_handshake(&my_req, f) > 0) {
+			TRACE("TLS handshake failed.\n");
+			return 0;
+		} else {
+			TRACE("TLS handshake complete.\n");
+		}
+
+		char buf[1024];
+		size_t r = sprintf(buf,
+			"GET /%s HTTP/1.0\r\n"
+			"User-Agent: curl/7.35.0\r\n"
+			"Host: %s\r\n"
+			"Accept: */*\r\n"
+			"\r\n", my_req.path, my_req.domain);
+
+		mbedtls_ssl_write(&_ssl, buf, r);
+	} else {
+		TRACE("*** This is not a secure connection.\n");
+		fprintf(f,
+			"GET /%s HTTP/1.0\r\n"
+			"User-Agent: curl/7.35.0\r\n"
+			"Host: %s\r\n"
+			"Accept: */*\r\n"
+			"\r\n", my_req.path, my_req.domain);
+	}
+
 	http_parser_settings settings;
 	memset(&settings, 0, sizeof(settings));
 	settings.on_header_field = callback_header_field;
@@ -432,13 +572,20 @@ int main(int argc, char * argv[]) {
 	http_parser parser;
 	http_parser_init(&parser, HTTP_RESPONSE);
 
-	fprintf(stderr,"Downloading netboot payload...\n");
-
 	gettimeofday(&start, NULL);
 	while (!feof(f)) {
 		char buf[10240];
 		memset(buf, 0, sizeof(buf));
-		size_t r = fread(buf, 1, 10240, f);
+		size_t r;
+		if (!my_req.ssl) {
+			r = fread(buf, 1, 10240, f);
+		} else {
+			r = mbedtls_ssl_read(&_ssl, buf, 10240);
+			if (r < 0) {
+				TRACE("TLS error: %d\n", r);
+				return 0;
+			}
+		}
 		http_parser_execute(&parser, &settings, buf, r);
 	}
 
