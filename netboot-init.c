@@ -202,7 +202,14 @@ void parse_url(char * d, struct http_req * r) {
 			strcpy(r->domain, d);
 			strcpy(r->path, s);
 		}
-		r->port = 80;
+		if (strstr(r->domain,":")) {
+			char * port = strstr(r->domain,":");
+			*port = '\0';
+			port++;
+			r->port = atoi(port);
+		} else {
+			r->port = 80;
+		}
 		r->ssl = 0;
 	} else if (strstr(d, "https://") == d) {
 
@@ -218,7 +225,14 @@ void parse_url(char * d, struct http_req * r) {
 			strcpy(r->domain, d);
 			strcpy(r->path, s);
 		}
-		r->port = 443;
+		if (strstr(r->domain,":")) {
+			char * port = strstr(r->domain,":");
+			*port = '\0';
+			port++;
+			r->port = atoi(port);
+		} else {
+			r->port = 443;
+		}
 		r->ssl = 1;
 	} else {
 		fprintf(stderr, "sorry, can't parse %s\n", d);
